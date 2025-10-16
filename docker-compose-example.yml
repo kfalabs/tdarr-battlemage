@@ -1,0 +1,53 @@
+services:
+  tdarr_node_1:
+    image: kfalabs/tdarr-battlemage:latest
+    container_name: tdarr_node_1
+    networks:
+      - bridge
+    environment:
+      TZ: "America/New_York" # Set your timezone here
+      serverIP: "0.0.0.0"
+      serverPort: "8266"
+      nodeIP: "0.0.0.0"
+      nodeID: "node-name"
+      # PUID: "1000"
+      # PGID: "1000"
+    ports:
+      - "8267:8267"
+    devices:
+       - "/dev/dri:/dev/dri" # If you have multiple intel GPUs, remove this and you can pass them individually below
+     # - "/dev/dri/card0:/dev/dri/card0"
+     # - "/dev/dri/renderD128:/dev/dri/renderD128"
+    volumes:
+     # - /app/tdarr/configs:/root/configs # Optional if you want access to the config file
+      - /app/tdarr/logs:/root/logs
+      - /app/media/:/mnt/media # Your media path
+      - /app/tdarr/temp:/temp # Better to map the temp dir to a fast storage (remember to set this dir when configuring tdarr).
+
+#   tdarr_node_2:
+#     image: kfalabs/tdarr-battlemage:latest
+#     container_name: tdarr_node_2
+#     networks:
+#       - bridge
+#     environment:
+#       # TZ: "America/New_York"
+#       serverIP: "0.0.0.0"
+#       serverPort: "8266"
+#       nodeIP: "0.0.0.0"
+#       nodeID: "node-name"
+#       # PUID: "1000"
+#       # PGID: "1000"
+#     ports:
+#       - "8268:8267"
+#     devices:
+#      # - "/dev/dri/card1:/dev/dri/card1"
+#      # - "/dev/dri/renderD129:/dev/dri/renderD129"
+#     volumes:
+#       - /app/tdarr2/configs:/root/configs
+#       - /app/tdarr2/logs:/root/logs
+#       - /app/media/:/mnt/media
+#       - /app/tdarr2/temp:/temp
+
+# networks:
+#   bridge:
+#     driver: bridge

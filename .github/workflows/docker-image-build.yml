@@ -1,0 +1,200 @@
+name: Auto-build on Tdarr version bump
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # every 30 minutes
+  workflow_dispatch: {}
+
+concurrency:
+  group: auto-build-tdarr
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+env:
+  IMAGE_NAME: tdarr-battlemage
+  GHCR_IMAGE: ghcr.io/kfalabs/tdarr-battlemage
+  DOCKERHUB_IMAGE: docker.io/${{ secrets.DOCKERHUB_USERNAME }}/tdarr-battlemage
+  VERSIONS_URL: https://storage.tdarr.io/versions.json
+  PLATFORMS: linux/amd64
+
+  HEALTH_SUCCESS_URL: ${{ secrets.HEALTH_SUCCESS_URL }}
+  HEALTH_FAILURE_URL: ${{ secrets.HEALTH_FAILURE_URL }}
+  HEALTH_TOKEN_ID_NAME: ${{ secrets.HEALTH_TOKEN_ID_NAME }}
+  HEALTH_TOKEN_ID: ${{ secrets.HEALTH_TOKEN_ID }}
+  HEALTH_TOKEN_SECRET_NAME: ${{ secrets.HEALTH_TOKEN_SECRET_NAME }}
+  HEALTH_TOKEN_SECRET: ${{ secrets.HEALTH_TOKEN_SECRET }}
+  HEALTH_BEARER: ${{ secrets.HEALTH_BEARER }}
+
+jobs:
+  build-on-update:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # NEW: ensure jq exists for the fetch step
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          registry: docker.io
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ secrets.GHCR_USERNAME }}
+          password: ${{ secrets.GHCR_TOKEN }}
+
+      # ── Determine latest version ────────────────────────────────────────────
+      - name: Fetch latest Tdarr version
+        id: tdarr
+        shell: bash
+        run: |
+          set -euo pipefail
+          json="$(curl -sSfL "$VERSIONS_URL")"
+          latest=$(jq -r 'keys[]' <<<"$json" | sed 's/^v//' | sort -V | tail -n1)
+          min="${MIN_VERSION:-0.0.0}"
+          if [[ "$(printf "%s\n%s" "$min" "$latest" | sort -V | tail -n1)" != "$latest" ]]; then
+            echo "Latest ($latest) is below MIN_VERSION ($min); exiting." >&2
+            echo "version=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "Latest Tdarr version detected: $latest"
+          echo "version=$latest" >> "$GITHUB_OUTPUT"
+
+      # ── Skip if BOTH registries already have the tag ────────────────────────
+      - name: Check if image tag exists on both registries
+        id: exists
+        if: steps.tdarr.outputs.version != ''
+        shell: bash
+        env:
+          VER: ${{ steps.tdarr.outputs.version }}
+          GHCR_IMAGE: ${{ env.GHCR_IMAGE }}
+          DOCKERHUB_IMAGE: ${{ env.DOCKERHUB_IMAGE }}
+        run: |
+          set -euo pipefail
+          miss=0
+          for image in \
+            "${GHCR_IMAGE}:${VER}" \
+            "${DOCKERHUB_IMAGE}:${VER}"
+          do
+            if docker manifest inspect "$image" >/dev/null 2>&1; then
+              echo "Found: $image"
+            else
+              echo "Missing: $image"
+              miss=1
+            fi
+          done
+          if [[ "$miss" -eq 0 ]]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Build cache ─────────────────────────────────────────────────────────
+      - name: Configure build cache
+        if: steps.exists.outputs.found == 'false' && steps.tdarr.outputs.version != ''
+        uses: actions/cache@v4
+        with:
+          path: /tmp/.buildx-cache
+          key: buildx-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            buildx-${{ runner.os }}-
+
+      # ── Metadata ────────────────────────────────────────────────────────────
+      - name: Docker metadata
+        id: meta
+        if: steps.exists.outputs.found == 'false' && steps.tdarr.outputs.version != ''
+        uses: docker/metadata-action@v5
+        with:
+          images: |
+            ${{ env.GHCR_IMAGE }}
+            ${{ env.DOCKERHUB_IMAGE }}
+          tags: |
+            type=raw,value=${{ steps.tdarr.outputs.version }}
+            type=raw,value=latest
+          labels: |
+            org.opencontainers.image.title=${{ env.IMAGE_NAME }}
+            org.opencontainers.image.version=${{ steps.tdarr.outputs.version }}
+            org.opencontainers.image.source=${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+
+      # ── Build & push ────────────────────────────────────────────────────────
+      - name: Build and push
+        if: steps.exists.outputs.found == 'false' && steps.tdarr.outputs.version != ''
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: ${{ env.PLATFORMS }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new,mode=max
+          build-args: |
+            UPSTREAM_VERSION=${{ steps.tdarr.outputs.version }}
+            EDITION=Tdarr_Node
+
+      - name: Sync :latest to the detected version (GHCR + Docker Hub)
+        if: steps.tdarr.outputs.version != '' && steps.exists.outputs.found == 'true'
+        shell: bash
+        env:
+          VER: ${{ steps.tdarr.outputs.version }}
+          GHCR_IMAGE: ${{ env.GHCR_IMAGE }}
+          DOCKERHUB_IMAGE: ${{ env.DOCKERHUB_IMAGE }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create -t "${GHCR_IMAGE}:latest"      "${GHCR_IMAGE}:${VER}"
+          docker buildx imagetools create -t "${DOCKERHUB_IMAGE}:latest" "${DOCKERHUB_IMAGE}:${VER}"
+          echo "Synced :latest to ${VER} on both registries."
+
+      - name: Move build cache
+        if: steps.exists.outputs.found == 'false' && steps.tdarr.outputs.version != ''
+        shell: bash
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+
+      # Make this strictly a "no version detected" no-op (avoid double messages)
+      - name: No-op (no version detected)
+        if: steps.tdarr.outputs.version == ''
+        run: echo "No version detected (below MIN_VERSION or fetch failed)."
+
+      # ── Notify Health Check (SUCCESS) ───────────────────────────────────────
+      - name: Notify Health Check (success)
+        if: success() && env.HEALTH_SUCCESS_URL != ''
+        run: |
+          ver="${{ steps.tdarr.outputs.version || 'none' }}"
+          curl -fsS --retry 5 --retry-delay 10 \
+            -X POST \
+            -H "${HEALTH_TOKEN_ID_NAME}: ${HEALTH_TOKEN_ID}" \
+            -H "${HEALTH_TOKEN_SECRET_NAME}: ${HEALTH_TOKEN_SECRET}" \
+            -H "Authorization: Bearer ${HEALTH_BEARER}" \
+            "${HEALTH_SUCCESS_URL}" \
+            || echo "⚠️ Failed to ping Health success URL"
+
+      # ── Notify Health Check (FAILURE) ───────────────────────────────────────
+      - name: Notify Health Check (failure)
+        if: failure() && env.HEALTH_FAILURE_URL != ''
+        run: |
+          ver="${{ steps.tdarr.outputs.version || 'none' }}"
+          curl -fsS --retry 5 --retry-delay 10 \
+            -X POST \
+            -H "${HEALTH_TOKEN_ID_NAME}: ${HEALTH_TOKEN_ID}" \
+            -H "${HEALTH_TOKEN_SECRET_NAME}: ${HEALTH_TOKEN_SECRET}" \
+            -H "Authorization: Bearer ${HEALTH_BEARER}" \
+            "${HEALTH_FAILURE_URL}" \
+            || echo "⚠️ Failed to ping Health failure URL"
