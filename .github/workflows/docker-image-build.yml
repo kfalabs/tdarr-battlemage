@@ -2,7 +2,7 @@ name: Auto-build on Tdarr version bump
 
 on:
   schedule:
-    - cron: "*/30 * * * *"   # every 30 minutes
+    - cron: "25 * * * *"   # every hour
   workflow_dispatch: {}
 
 concurrency:
