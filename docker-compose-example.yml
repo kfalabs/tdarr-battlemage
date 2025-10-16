@@ -1,3 +1,7 @@
+networks:
+  bridge:
+    driver: bridge
+
 services:
   tdarr_node_1:
     image: kfalabs/tdarr-battlemage:latest
@@ -47,7 +51,3 @@ services:
 #       - /app/tdarr2/logs:/root/logs
 #       - /app/media/:/mnt/media
 #       - /app/tdarr2/temp:/temp
-
-# networks:
-#   bridge:
-#     driver: bridge
