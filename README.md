@@ -7,7 +7,7 @@ Tdarr with Inter Arc Battlemage GPU support!
 
 This uses Ubuntu 25.04 (Plucky) as the base image, so it is pretty bleeding edge and may break some flows since the installed packages are more recent.
 
-Tested on a host with Linux 6.17 kernel. Technically it should work with Linux 6.12+.
+Tested on a host with Linux 6.12 and 6.17 kernel. It should work with Linux 6.12+.
 
 ## Installation
 An example docker compose has been provided to get started. Refer to the official repository at: https://github.com/HaveAGitGat/Tdarr for all environment variables/configuration options. Remember that any environment variable set in docker overwrites the config file.
