@@ -1,4 +1,4 @@
-# Tdarr with Intel Arc Battlemange Support
+# Tdarr with Intel Arc Battlemage Support
 
 [![Auto-build on Tdarr version bump](https://github.com/kfalabs/tdarr-battlemage/actions/workflows/docker-image-build.yml/badge.svg)](https://github.com/kfalabs/tdarr-battlemage/actions/workflows/docker-image-build.yml)
 
