@@ -19,8 +19,8 @@ RUN add-apt-repository -y ppa:kobuk-team/intel-graphics && \
 
 # Intel Level Zero / OpenCL / metrics
 RUN apt-get install -y --no-install-recommends \
-      libze-intel-gpu1 libze1 intel-metrics-discovery \
-      intel-opencl-icd clinfo intel-gsc
+      libze-intel-gpu1 libze1 metrics-discovery \
+      intel-opencl-icd clinfo igsc
 
 # VA-API + VPL + legacy MFX
 RUN apt-get install -y --no-install-recommends \
