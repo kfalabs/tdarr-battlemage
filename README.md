@@ -5,7 +5,7 @@
 ## Intro
 Tdarr with Inter Arc Battlemage GPU support!
 
-This uses Ubuntu 25.04 (Plucky) as the base image, so it is pretty bleeding edge and may break some flows since the installed packages are more recent.
+This uses Ubuntu 25.10 (Questing Quokka) as the base image, so it is pretty bleeding edge and may break some flows since the installed packages are more recent.
 
 Tested on a host with Linux 6.12 and 6.17 kernel. It should work with Linux 6.12+.
 
