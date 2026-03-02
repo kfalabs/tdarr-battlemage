@@ -1,5 +1,5 @@
 # Dockerfile
-FROM FROM ubuntu:questing
+FROM ubuntu:questing
 
 ARG DEBIAN_FRONTEND=noninteractive
 ARG UPSTREAM_VERSION=auto         # "auto" resolves the latest from versions.json
